@@ -8,5 +8,8 @@ setup(
     license='',
     author='SolarFresh',
     author_email='shangyuhuang@gmail.com',
-    description=''
+    description='',
+    install_requires=[
+        "scipy==0.19.1"
+    ]
 )
