@@ -10,7 +10,6 @@ setup(
     author_email='shangyuhuang@gmail.com',
     description='',
     install_requires=[
-        "opencv-python==3.2.0.7",
-        "scipy==0.19.1"
+        "tensorflow==1.2.1",
     ]
 )
