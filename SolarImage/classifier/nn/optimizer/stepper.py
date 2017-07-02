@@ -1,3 +1,4 @@
+from tensorflow import global_variables_initializer
 from tensorflow import train
 
 
@@ -28,6 +29,7 @@ def runner(x, y_, train_stepper, cost_fn, iter_max, batch_size,
     :return: a list of accuracy
     """
     monitor = []
+    global_variables_initializer().run()
     for _ in range(iter_max):
         #  train process
         batch_xs, batch_ys = train_dataset.next_batch(batch_size, shuffle=shuffle)
