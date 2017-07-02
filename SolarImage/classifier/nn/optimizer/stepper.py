@@ -1,5 +1,6 @@
 from tensorflow import train
 
+
 def gradient_decent(learning_rate, objective):
     """
      This is a first-order iterative optimization algorithm for finding the minimum of a function.
