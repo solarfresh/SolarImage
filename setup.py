@@ -1,7 +1,7 @@
 from distutils.core import setup
 
 setup(
-    name='SolarImage',
+    name='solarimage',
     version='0.0.1',
     packages=[''],
     url='',
