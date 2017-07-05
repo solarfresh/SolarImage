@@ -12,6 +12,6 @@ def linear(x, d, k):
     :param k:  size of label to be classified
     :return:
     """
-    w = Variable(zeros([d, k]))
-    b = Variable(zeros([k]))
-    return matmul(x, w) + b
+    w = Variable(zeros([d, k]), name="weights")
+    b = Variable(zeros([k]), name="bias")
+    return matmul(x, w) + b, w, b

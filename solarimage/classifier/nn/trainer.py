@@ -3,7 +3,7 @@ from .optimizer import objective
 from .optimizer import stepper
 from tensorflow import float32
 from tensorflow import global_variables_initializer
-from tensorflow import InteractiveSession
+from tensorflow import Session
 from tensorflow import placeholder
 
 
@@ -34,21 +34,20 @@ def runner(train_dataset, batch_size, model='lr', optimizer='gd',
     #  Allocate images column vector
     x = placeholder(float32, [None, images_size])
     # Create a model maps labels from images
-    y = MODEL_DICT[model](x, images_size, labels_size)
+    y, w, b = MODEL_DICT[model](x, images_size, labels_size)
     #  Allocate labels column vector
     y_ = placeholder(float32, [None, labels_size])
     #  Define the loss function
     cost = objective.cross_entropy(y, y_)
     #  Create an optimization stepper
     train_step = OPTIMIZE_DICT[optimizer](learning_rate, cost)
-    #  Initialize a session
-    session = InteractiveSession()
 
     loss_list = []
-    global_variables_initializer().run()
-    for _ in range(iter_max):
-        #  train process
-        batch_xs, batch_ys = train_dataset.next_batch(batch_size, shuffle=shuffle)
-        _, loss_val = session.run([train_step, cost], feed_dict={x: batch_xs, y_: batch_ys})
-        loss_list.append(loss_val)
-    return loss_list
+    with Session() as sess:
+        sess.run(global_variables_initializer())
+        for _ in range(iter_max):
+            #  train process
+            batch_xs, batch_ys = train_dataset.next_batch(batch_size, shuffle=shuffle)
+            _, weights, bias, loss_val = sess.run([train_step, w, b, cost], feed_dict={x: batch_xs, y_: batch_ys})
+            loss_list.append(loss_val)
+    return loss_list, weights, bias
