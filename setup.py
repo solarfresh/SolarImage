@@ -1,12 +1,16 @@
 from distutils.core import setup
 
 setup(
-    name='SolarImage',
+    name='solarimage',
     version='0.0.1',
     packages=[''],
     url='',
     license='',
     author='SolarFresh',
     author_email='shangyuhuang@gmail.com',
-    description=''
+    description='',
+    install_requires=[
+        "opencv-python==3.2.0.7",
+        "tensorflow==1.2.1",
+    ]
 )
