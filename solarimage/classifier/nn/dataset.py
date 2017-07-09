@@ -11,7 +11,7 @@ class DataSet(object):
     def __init__(self,
                  images,
                  labels,
-                 dtype=dtypes.uint8,
+                 dtype=dtypes.float32,
                  reshape=False,
                  seed=None):
         """Construct a DataSet.
