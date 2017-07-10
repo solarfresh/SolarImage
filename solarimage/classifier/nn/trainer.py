@@ -3,10 +3,13 @@ from .optimizer import objective
 from .optimizer import stepper
 from tensorflow import float32
 from tensorflow import global_variables_initializer
-from tensorflow import Session
 from tensorflow import placeholder
+from tensorflow import Session
+from tensorflow import Variable
+from tensorflow import zeros
 
 
+#  Will need  a configure file in the future
 MODEL_DICT = {
     "lr": regression.linear
 }
@@ -33,8 +36,10 @@ def runner(train_dataset, batch_size, model='lr', optimizer='gd',
     labels_size = train_dataset.labels.shape[1]
     #  Allocate images column vector
     x = placeholder(float32, [None, images_size])
+    w = Variable(zeros([images_size, labels_size]), name="weights")
+    b = Variable(zeros([labels_size]), name="bias")
     # Create a model maps labels from images
-    y, w, b = MODEL_DICT[model](x, images_size, labels_size)
+    y = MODEL_DICT[model](x, w, b)
     #  Allocate labels column vector
     y_ = placeholder(float32, [None, labels_size])
     #  Define the loss function
