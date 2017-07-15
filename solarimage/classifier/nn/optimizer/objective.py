@@ -1,6 +1,21 @@
 from tensorflow import Tensor
+from tensorflow import log
 from tensorflow import nn
 from tensorflow import reduce_mean
+
+
+def genradvers(real, fake):
+    """
+    This is a function generating objective functions in the generative adversarial net.
+    We use negative sign for the loss functions because they need to be maximized,
+    whereas TensorFlow's optimizer can only do minimization.
+    :param real: the probability from actual data passing through the discriminator
+    :param fake: the probability from samples from generator and passing through the discriminator
+    :return:
+    """
+    d_loss = -reduce_mean(log(real) + log(1. - fake))
+    g_loss = -reduce_mean(log(fake))
+    return d_loss, g_loss
 
 
 def cross_entropy(y, y_):
