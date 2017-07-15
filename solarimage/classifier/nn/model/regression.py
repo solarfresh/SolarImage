@@ -2,7 +2,7 @@ from tensorflow import matmul
 from tensorflow import nn
 
 
-def genradvers(x, w1, b1, w2, b2):
+def log_prob(x, w1, b1, w2, b2):
     """
     Here, we collect models of generative adversarial nets
     :return:
@@ -11,7 +11,8 @@ def genradvers(x, w1, b1, w2, b2):
     #  Be not sure the movitation of using the second regression
     #  It is necessary to provide an reason later.
     log_prob = matmul(h1, w2) + b2
-    return nn.sigmoid(log_prob)
+    prob = nn.sigmoid(log_prob)
+    return prob, log_prob
 
 
 def linear(x, w, b):
