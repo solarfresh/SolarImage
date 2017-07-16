@@ -2,7 +2,7 @@ from tensorflow import matmul
 from tensorflow import nn
 
 
-def log_prob(x, w1, b1, w2, b2):
+def log_linear(x, w1, b1, w2, b2):
     """
     Here, we collect models of generative adversarial nets
     :return:

@@ -1,14 +1,15 @@
 from tensorflow import train
 
 
-def adam_optimizer(objective, weights):
+def adam_optimizer(learning_rate, objective, weights):
     """
     A stochastic gradient decent method
     :param objective:  an objective function
     :param weights:  weights used in the model
     :return:
     """
-    return train.AdamOptimizer().minimize(objective, var_list=weights)
+    return train.AdamOptimizer(learning_rate=learning_rate)\
+        .minimize(objective, var_list=weights)
 
 
 def gradient_decent(learning_rate, objective):
