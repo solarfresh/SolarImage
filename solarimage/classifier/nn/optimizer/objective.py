@@ -13,18 +13,18 @@ def genradvers(real, fake, batch_size):
     whereas TensorFlow's optimizer can only do minimization.
     :param real: the probability from actual data passing through the discriminator
     :param fake: the probability from samples from generator and passing through the discriminator
+    :param batch_size: the size of running iteration incrementally
     :return:
     """
-    #  By using softmax gan to check the convergence
-    # d_target = 1. / batch_size
-    # g_target = 1. / (batch_size * 2)
-    # z = reduce_sum(exp(-real)) + reduce_sum(exp(-fake))
-    #
-    # d_loss = reduce_sum(d_target * real) + log(z)
-    # print("g_loss_reduce_sum")
-    # g_loss = reduce_sum(g_target * real) + reduce_sum(g_target * fake) + log(z)
-    d_loss = -reduce_mean(log(real) + log(1. - fake))
-    g_loss = -reduce_mean(log(fake))
+     # By using softmax gan to check the convergence
+    d_target = 1. / batch_size
+    g_target = 1. / (batch_size * 2)
+    z = reduce_sum(exp(-real)) + reduce_sum(exp(-fake))
+
+    d_loss = reduce_sum(d_target * real) + log(z + 1e-8)
+    g_loss = reduce_sum(g_target * real) + reduce_sum(g_target * fake) + log(z + 1e-8)
+    # d_loss = -reduce_mean(log(real) + log(1. - fake))
+    # g_loss = -reduce_mean(log(fake))
     return d_loss, g_loss
 
 

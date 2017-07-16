@@ -113,6 +113,8 @@ class TrainVar(DataSet):
         self.labels_size = self.labels.shape[1]
         self.sample_size = sample_size
         self.hidden_size = hidden_size
+        x = placeholder(float32, shape=[None, self.image_size], name='src_var')
+        self.train_var = x
 
     def get_genradvers_var(self):
         if not self.sample_size:
@@ -131,7 +133,8 @@ class TrainVar(DataSet):
         d_w2 = Variable(xavier_init([self.hidden_size, 1]), name='dis_weight_2')
         d_b2 = Variable(zeros(shape=[1]), name='dis_bias_2')
         theta_d = [d_w1, d_b1, d_w2, d_b2]
-        return z, theta_g, x, theta_d
+        self.train_var = z, theta_g, x, theta_d
+        return self.train_var
 
 
 class TrainModel(TrainVar):
@@ -141,8 +144,8 @@ class TrainModel(TrainVar):
     def __init__(self, *args, **kwargs):
         TrainVar.__init__(self, *args, **kwargs)
 
-    def get_genradvers_loss(self, z, theta_g, x, theta_d, batch_size):
-        # z, theta_g, x, theta_d = self.get_genradvers_var()
+    def get_genradvers_loss(self, batch_size):
+        z, theta_g, x, theta_d = self.train_var
         sample, _ = regression.log_linear(z, *theta_g)
         real_prob, real_log_prob = regression.log_linear(x, *theta_d)
         fake_prob, fake_log_prob = regression.log_linear(sample, *theta_d)
@@ -155,10 +158,8 @@ class TrainOpt(TrainModel):
         self.learning_rate = learning_rate
 
     def get_genradvers_solver(self, d_loss, theta_d, g_loss, theta_g):
-        # z, theta_g, x, theta_d = self.get_genradvers_var()
-        # d_loss, g_loss = self.get_genradvers_loss()
         # Only update D(X)'s parameters, so var_list = theta_D
-        d_solver =  stepper.adam_optimizer(self.learning_rate, d_loss, theta_d)
+        d_solver = stepper.adam_optimizer(self.learning_rate, d_loss, theta_d)
         # Only update G(X)'s parameters, so var_list = theta_G
         g_solver = stepper.adam_optimizer(self.learning_rate, g_loss, theta_g)
         return d_solver, g_solver
@@ -172,11 +173,11 @@ class TrainIter(TrainOpt):
 
     def run_genradvers(self):
         def sample_z(m, n):
-            '''Uniform prior for G(Z)'''
+            # Uniform prior for G(Z)'
             return np.random.uniform(-1., 1., size=[m, n])
 
         z, theta_g, x, theta_d = self.get_genradvers_var()
-        d_loss, g_loss = self.get_genradvers_loss(z, theta_g, x, theta_d, self.batch_size)
+        d_loss, g_loss = self.get_genradvers_loss(self.batch_size)
         d_solver, g_solver = self.get_genradvers_solver(d_loss, theta_d, g_loss, theta_g)
 
         d_loss_list = []
@@ -187,9 +188,8 @@ class TrainIter(TrainOpt):
                 #  train process
                 batch_xs, batch_ys = self.next_batch(self.batch_size, shuffle=False)
                 zs = sample_z(self.batch_size, self.sample_size)
-                print(batch_xs)
                 _, d_loss_curr = sess.run([d_solver, d_loss], feed_dict={x: batch_xs, z: zs})
-                _, g_loss_curr = sess.run([g_solver, g_loss], feed_dict={z: zs})
+                _, g_loss_curr = sess.run([g_solver, g_loss], feed_dict={x: batch_xs, z: zs})
                 d_loss_list.append(d_loss_curr)
                 g_loss_list.append(g_loss_curr)
         return d_loss_list, g_loss_list
