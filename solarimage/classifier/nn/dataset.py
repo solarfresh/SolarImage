@@ -12,7 +12,7 @@ class DataSet(object):
                  images,
                  labels,
                  dtype=dtypes.float32,
-                 reshape=True,
+                 reshape=False,
                  seed=None):
         """Construct a DataSet.
                 `dtype` can be either `uint8` to leave the input as `[0, 255]`,
