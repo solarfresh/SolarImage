@@ -107,28 +107,28 @@ class TrainVar(DataSet):
     """
     A class defining training variables
     """
-    def __init__(self, sample_size=None, *args, **kwargs):
+    def __init__(self, sample_size=100, hidden_size=128, *args, **kwargs):
         DataSet.__init__(self, *args, **kwargs)
-        self.image_size = self.images.size
-        self.labels_size = self.labels.size
-        if sample_size:
-            self.sample_size = sample_size
+        self.image_size = self.images.shape[1]
+        self.labels_size = self.labels.shape[1]
+        self.sample_size = sample_size
+        self.hidden_size = hidden_size
 
     def get_genradvers_var(self):
         if not self.sample_size:
             raise ValueError("The size of sample is necessary.")
         # Generator Net
         z = placeholder(float32, shape=[None, self.sample_size], name='sample_var')
-        g_w1 = Variable(xavier_init([self.sample_size, self.labels_size]), name='gen_weight_1')
-        g_b1 = Variable(zeros(shape=[self.labels_size]), name='gen_bias_1')
-        g_w2 = Variable(xavier_init([self.sample_size, self.image_size]), name='gen_weight_2')
-        g_b2 = Variable(zeros(shape=[self.labels_size]), name='gen_bias_2')
+        g_w1 = Variable(xavier_init([self.sample_size, self.hidden_size]), name='gen_weight_1')
+        g_b1 = Variable(zeros(shape=[self.hidden_size]), name='gen_bias_1')
+        g_w2 = Variable(xavier_init([self.hidden_size, self.image_size]), name='gen_weight_2')
+        g_b2 = Variable(zeros(shape=[self.image_size]), name='gen_bias_2')
         theta_g = [g_w1, g_b1, g_w2, g_b2]
         # Discriminator Net
         x = placeholder(float32, shape=[None, self.image_size], name='src_var')
-        d_w1 = Variable(xavier_init([self.image_size, self.labels_size]), name='dis_weight_1')
-        d_b1 = Variable(zeros(shape=[self.labels_size]), name='dis_bias_1')
-        d_w2 = Variable(xavier_init([self.labels_size, 1]), name='dis_weight_2')
+        d_w1 = Variable(xavier_init([self.image_size, self.hidden_size]), name='dis_weight_1')
+        d_b1 = Variable(zeros(shape=[self.hidden_size]), name='dis_bias_1')
+        d_w2 = Variable(xavier_init([self.hidden_size, 1]), name='dis_weight_2')
         d_b2 = Variable(zeros(shape=[1]), name='dis_bias_2')
         theta_d = [d_w1, d_b1, d_w2, d_b2]
         return z, theta_g, x, theta_d
@@ -141,12 +141,12 @@ class TrainModel(TrainVar):
     def __init__(self, *args, **kwargs):
         TrainVar.__init__(self, *args, **kwargs)
 
-    def get_genradvers_loss(self):
-        z, theta_g, x, theta_d = self.get_genradvers_var()
+    def get_genradvers_loss(self, z, theta_g, x, theta_d, batch_size):
+        # z, theta_g, x, theta_d = self.get_genradvers_var()
         sample, _ = regression.log_linear(z, *theta_g)
         real_prob, real_log_prob = regression.log_linear(x, *theta_d)
         fake_prob, fake_log_prob = regression.log_linear(sample, *theta_d)
-        return objective.genradvers(real_prob, fake_prob)
+        return objective.genradvers(real_log_prob, fake_log_prob, batch_size)
 
 
 class TrainOpt(TrainModel):
@@ -154,9 +154,9 @@ class TrainOpt(TrainModel):
         TrainModel.__init__(self, *args, **kwargs)
         self.learning_rate = learning_rate
 
-    def get_genradvers_solver(self):
-        z, theta_g, x, theta_d = self.get_genradvers_var()
-        d_loss, g_loss = self.get_genradvers_loss()
+    def get_genradvers_solver(self, d_loss, theta_d, g_loss, theta_g):
+        # z, theta_g, x, theta_d = self.get_genradvers_var()
+        # d_loss, g_loss = self.get_genradvers_loss()
         # Only update D(X)'s parameters, so var_list = theta_D
         d_solver =  stepper.adam_optimizer(self.learning_rate, d_loss, theta_d)
         # Only update G(X)'s parameters, so var_list = theta_G
@@ -176,8 +176,8 @@ class TrainIter(TrainOpt):
             return np.random.uniform(-1., 1., size=[m, n])
 
         z, theta_g, x, theta_d = self.get_genradvers_var()
-        d_loss, g_loss = self.get_genradvers_loss()
-        d_solver, g_solver = self.get_genradvers_solver()
+        d_loss, g_loss = self.get_genradvers_loss(z, theta_g, x, theta_d, self.batch_size)
+        d_solver, g_solver = self.get_genradvers_solver(d_loss, theta_d, g_loss, theta_g)
 
         d_loss_list = []
         g_loss_list = []
@@ -186,8 +186,10 @@ class TrainIter(TrainOpt):
             for _ in range(self.iter_max):
                 #  train process
                 batch_xs, batch_ys = self.next_batch(self.batch_size, shuffle=False)
-                _, d_loss_curr = sess.run([d_solver, d_loss], feed_dict={x: batch_xs, z: sample_z(self.batch_size, self.sample_size)})
-                _, g_loss_curr = sess.run([g_solver, g_loss], feed_dict={z: sample_z(self.batch_size, self.sample_size)})
+                zs = sample_z(self.batch_size, self.sample_size)
+                print(batch_xs)
+                _, d_loss_curr = sess.run([d_solver, d_loss], feed_dict={x: batch_xs, z: zs})
+                _, g_loss_curr = sess.run([g_solver, g_loss], feed_dict={z: zs})
                 d_loss_list.append(d_loss_curr)
                 g_loss_list.append(g_loss_curr)
         return d_loss_list, g_loss_list
