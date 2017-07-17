@@ -109,12 +109,10 @@ class TrainVar(DataSet):
     """
     def __init__(self, sample_size=100, hidden_size=128, *args, **kwargs):
         DataSet.__init__(self, *args, **kwargs)
-        self.image_size = self.images.shape[1]
+        self.images_size = self.images.shape[1]
         self.labels_size = self.labels.shape[1]
         self.sample_size = sample_size
         self.hidden_size = hidden_size
-        x = placeholder(float32, shape=[None, self.image_size], name='src_var')
-        self.train_var = x
 
     def get_genradvers_var(self):
         if not self.sample_size:
@@ -123,18 +121,23 @@ class TrainVar(DataSet):
         z = placeholder(float32, shape=[None, self.sample_size], name='sample_var')
         g_w1 = Variable(xavier_init([self.sample_size, self.hidden_size]), name='gen_weight_1')
         g_b1 = Variable(zeros(shape=[self.hidden_size]), name='gen_bias_1')
-        g_w2 = Variable(xavier_init([self.hidden_size, self.image_size]), name='gen_weight_2')
-        g_b2 = Variable(zeros(shape=[self.image_size]), name='gen_bias_2')
+        g_w2 = Variable(xavier_init([self.hidden_size, self.images_size]), name='gen_weight_2')
+        g_b2 = Variable(zeros(shape=[self.images_size]), name='gen_bias_2')
         theta_g = [g_w1, g_b1, g_w2, g_b2]
         # Discriminator Net
-        x = placeholder(float32, shape=[None, self.image_size], name='src_var')
-        d_w1 = Variable(xavier_init([self.image_size, self.hidden_size]), name='dis_weight_1')
+        x = placeholder(float32, shape=[None, self.images_size], name='src_var')
+        d_w1 = Variable(xavier_init([self.images_size, self.hidden_size]), name='dis_weight_1')
         d_b1 = Variable(zeros(shape=[self.hidden_size]), name='dis_bias_1')
         d_w2 = Variable(xavier_init([self.hidden_size, 1]), name='dis_weight_2')
         d_b2 = Variable(zeros(shape=[1]), name='dis_bias_2')
         theta_d = [d_w1, d_b1, d_w2, d_b2]
-        self.train_var = z, theta_g, x, theta_d
-        return self.train_var
+        return z, theta_g, x, theta_d
+
+    def get_simple_var(self):
+        x = placeholder(float32, shape=[None, self.images_size], name='src_var')
+        w = Variable(zeros([self.images_size, self.labels_size]), name="weights")
+        b = Variable(zeros([self.labels_size]), name="bias")
+        return x, w, b
 
 
 class TrainModel(TrainVar):
@@ -144,12 +147,15 @@ class TrainModel(TrainVar):
     def __init__(self, *args, **kwargs):
         TrainVar.__init__(self, *args, **kwargs)
 
-    def get_genradvers_loss(self, batch_size):
-        z, theta_g, x, theta_d = self.train_var
-        sample, _ = regression.log_linear(z, *theta_g)
+    def get_genradvers_loss(self, batch_size, x, sample, theta_d):
         real_prob, real_log_prob = regression.log_linear(x, *theta_d)
         fake_prob, fake_log_prob = regression.log_linear(sample, *theta_d)
         return objective.genradvers(real_log_prob, fake_log_prob, batch_size)
+
+    def linear_regression(self, x, w, b):
+        y = regression.linear(x, w, b)
+        y_ = placeholder(float32, [None, self.labels_size])
+        return y, y_
 
 
 class TrainOpt(TrainModel):
@@ -164,6 +170,9 @@ class TrainOpt(TrainModel):
         g_solver = stepper.adam_optimizer(self.learning_rate, g_loss, theta_g)
         return d_solver, g_solver
 
+    def get_simple_solver(self, loss):
+        return stepper.gradient_decent(self.learning_rate, loss)
+
 
 class TrainIter(TrainOpt):
     def __init__(self, batch_size, iter_max, *args, **kwargs):
@@ -176,8 +185,10 @@ class TrainIter(TrainOpt):
             # Uniform prior for G(Z)'
             return np.random.uniform(-1., 1., size=[m, n])
 
+        batch_size = self.batch_size
         z, theta_g, x, theta_d = self.get_genradvers_var()
-        d_loss, g_loss = self.get_genradvers_loss(self.batch_size)
+        sample, _ = regression.log_linear(z, *theta_g)
+        d_loss, g_loss = self.get_genradvers_loss(batch_size, x, sample, theta_d)
         d_solver, g_solver = self.get_genradvers_solver(d_loss, theta_d, g_loss, theta_g)
 
         d_loss_list = []
@@ -194,53 +205,17 @@ class TrainIter(TrainOpt):
                 g_loss_list.append(g_loss_curr)
         return d_loss_list, g_loss_list
 
-
-#  Will need  a configure file in the future
-MODEL_DICT = {
-    "llr": regression.log_linear,
-    "lr": regression.linear
-}
-OPTIMIZE_DICT = {
-    "gd": stepper.gradient_decent,
-    "adam": stepper.adam_optimizer
-}
-
-
-def runner(train_dataset, batch_size, model='lr', optimizer='gd',
-           iter_max=1000, learning_rate=0.5, shuffle=True):
-    """
-    An runner of optimizer to approach the minimum error
-    :param train_dataset: the data set used to learn
-    :param batch_size: the size of batch obtained from dataset
-    :param model: a model used to build the relation between input and output
-    :param optimizer: an optimization to obtain the coefficients of neuron
-    :param iter_max: the max times of iteration
-    :param learning_rate: the size of step of gradient decent
-    :param shuffle: to randomize the data set initially
-    :return: a list of accuracy
-    """
-    #  Configuration
-    images_size = train_dataset.images.shape[1]
-    labels_size = train_dataset.labels.shape[1]
-    #  Allocate images column vector
-    x = placeholder(float32, [None, images_size])
-    w = Variable(zeros([images_size, labels_size]), name="weights")
-    b = Variable(zeros([labels_size]), name="bias")
-    # Create a model maps labels from images
-    y = MODEL_DICT[model](x, w, b)
-    #  Allocate labels column vector
-    y_ = placeholder(float32, [None, labels_size])
-    #  Define the loss function
-    cost = objective.cross_entropy(y, y_)
-    #  Create an optimization stepper
-    train_step = OPTIMIZE_DICT[optimizer](learning_rate, cost)
-
-    loss_list = []
-    with Session() as sess:
-        sess.run(global_variables_initializer())
-        for _ in range(iter_max):
-            #  train process
-            batch_xs, batch_ys = train_dataset.next_batch(batch_size, shuffle=shuffle)
-            _, weights, bias, loss_val = sess.run([train_step, w, b, cost], feed_dict={x: batch_xs, y_: batch_ys})
-            loss_list.append(loss_val)
-    return loss_list, weights, bias
+    def run_simple_nn(self):
+        x, w, b = self.get_simple_var()
+        y, y_ = self.linear_regression(x, w, b)
+        loss = objective.cross_entropy(y, y_)
+        solver = self.get_simple_solver(loss)
+        loss_list = []
+        with Session() as sess:
+            sess.run(global_variables_initializer())
+            for _ in range(self.iter_max):
+                #  train process
+                batch_xs, batch_ys = self.next_batch(self.batch_size, shuffle=True)
+                _, loss_val = sess.run([solver, loss], feed_dict={x: batch_xs, y_: batch_ys})
+                loss_list.append(loss_val)
+        return loss_list
