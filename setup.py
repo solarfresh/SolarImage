@@ -8,6 +8,8 @@ setup(
     author='SolarFresh',
     author_email='shangyuhuang@gmail.com',
     description='',
+    packages=['solarimage'],
+    package_dir={'solarimage': 'solarimage'},
     install_requires=[
         "opencv-python==3.2.0.7",
         "pandas==0.20.3",
