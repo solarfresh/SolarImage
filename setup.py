@@ -3,8 +3,6 @@ from distutils.core import setup
 setup(
     name='solarimage',
     version='0.0.1',
-    packages=['solarimage'],
-    package_dir={'solarimage': 'solarimage/'},
     url='',
     license='',
     author='SolarFresh',
