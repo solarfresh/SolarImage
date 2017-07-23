@@ -125,12 +125,17 @@ class TrainVar(DataSet):
             self.images_depth = self.images.shape[2]
 
     def get_convolution_var(self):
+        if self.rank < 2:
+            raise ValueError("The shape of images must be 2-D")
+        x = placeholder(float32, shape=[self.images_width, self.images_height], name='src_var')
         # patch 5x5, in size 1, and filter size 32
         conv_w1 = Variable(truncated_normal([5, 5, 1, 32], stddev=0.1), name='conv_weight_1')
         conv_b1 = Variable(constant(0.1, shape=[32]), name='conv_bias_1')
         # patch 5x5, in size 32, and filter size 64
         conv_w2 = Variable(truncated_normal([5, 5, 32, 64], stddev=0.1), name='conv_weight_2')
         conv_b2 = Variable(constant(0.1, shape=[64]), name='conv_bias_2')
+        theta_conv = [conv_w1, conv_b1, conv_w2, conv_b2]
+        return x, theta_conv
 
     def get_genradvers_var(self, sample_size=100, hidden_size=128):
         # Generator Net
@@ -171,8 +176,6 @@ class TrainModel(TrainVar):
             layer_flat = reshape(layer, [-1, num_features])
             return layer_flat, num_features
 
-        if self.rank < 2:
-            raise ValueError("The shape of images must be 2-D")
         # Convolutional Layer #1
         #  strides:  [batch_stride x_stride y_stride depth_stride]
         conv1 = layers.conv2d(
