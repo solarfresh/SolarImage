@@ -14,6 +14,7 @@ from tensorflow import constant
 from tensorflow import float32
 from tensorflow import global_variables_initializer
 from tensorflow import layers
+from tensorflow import matmul
 from tensorflow import nn
 from tensorflow import placeholder
 from tensorflow import reshape
@@ -109,7 +110,7 @@ class DataSet(object):
             return self._images[start:end], self._labels[start:end]
 
 
-class TrainVar(DataSet):
+class DeepVar(DataSet):
     """
     A class defining training variables
     """
@@ -127,7 +128,9 @@ class TrainVar(DataSet):
     def get_convolution_var(self):
         if self.rank < 2:
             raise ValueError("The shape of images must be 2-D")
-        x = placeholder(float32, shape=[self.images_width, self.images_height], name='src_var')
+        x = placeholder(float32, shape=[self.images_width, self.images_height], name='src_var_x')
+        y_ = placeholder(float32, [None, self.labels_size], name='src_var_y')
+        keep_prob = placeholder(float32, name="keep_prob")
         # patch 5x5, in size 1, and filter size 32
         conv_w1 = Variable(truncated_normal([5, 5, 1, 32], stddev=0.1), name='conv_weight_1')
         conv_b1 = Variable(constant(0.1, shape=[32]), name='conv_bias_1')
@@ -135,7 +138,14 @@ class TrainVar(DataSet):
         conv_w2 = Variable(truncated_normal([5, 5, 32, 64], stddev=0.1), name='conv_weight_2')
         conv_b2 = Variable(constant(0.1, shape=[64]), name='conv_bias_2')
         theta_conv = [conv_w1, conv_b1, conv_w2, conv_b2]
-        return x, theta_conv
+        ## func1 layer ##
+        fc_w1 = Variable(truncated_normal([7 * 7 * 64, 1024], stddev=0.1), name='fc_weight_1')
+        fc_b1 = Variable(constant(0.1, shape=[1024]), name='fc_bias_1')
+        # [n_samples, 7, 7, 64] ->> [n_samples, 7*7*64]
+        fc_w2 = Variable(truncated_normal([1024, self.labels_size], stddev=0.1), name='fc_weight_2')
+        fc_b2 = Variable(constant(0.1, shape=[self.labels_size]), name='fc_bias_2')
+        theta_fc = [fc_w1, fc_b1, fc_w2, fc_b2]
+        return x, y_, theta_conv, keep_prob, theta_fc
 
     def get_genradvers_var(self, sample_size=100, hidden_size=128):
         # Generator Net
@@ -161,14 +171,14 @@ class TrainVar(DataSet):
         return x, w, b
 
 
-class TrainModel(TrainVar):
+class DeepModel(DeepVar):
     """
     A class defining training models
     """
     def __init__(self, *args, **kwargs):
-        TrainVar.__init__(self, *args, **kwargs)
+        DeepVar.__init__(self, *args, **kwargs)
 
-    def convolutional_nets(self, batch_size, images, labels, mode):
+    def convolutional_nets(self, x, y_, theta_conv, keep_prob, theta_fc):
         def flatten_layer(layer):
             layer_shape = layer.get_shape()
             num_features = layer_shape[1:4].num_elements()
@@ -178,36 +188,25 @@ class TrainModel(TrainVar):
 
         # Convolutional Layer #1
         #  strides:  [batch_stride x_stride y_stride depth_stride]
-        conv1 = layers.conv2d(
-            inputs=images,
-            filters=32,
-            kernel_size=[5, 5],
-            padding="same",
-            activation=nn.relu)
-
+        conv1 = nn.relu(nn.conv2d(x, theta_conv[0], strides=[1, 1, 1, 1], padding='SAME') + theta_conv[1])
         # Pooling Layer #1
         #  If some cases, people slide the windows by more than 1 pixel. This number is called stride.
-        pool1 = layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
-
-        # Convolutional Layer #2 and Pooling Layer #2
-        conv2 = layers.conv2d(
-            inputs=pool1,
-            filters=64,
-            kernel_size=[5, 5],
-            padding="same",
-            activation=nn.relu)
-        pool2 = layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
-
-        # Dense Layer
+        pool1 = nn.max_pool(conv1, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        # Convolutional Layer #2
+        conv2 = nn.relu(nn.conv2d(pool1, theta_conv[2], strides=[1, 1, 1, 1], padding='SAME') + theta_conv[3])
+        # Pooling Layer  # 2
+        pool2 = nn.max_pool(conv2, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
+        # Flattening Layer
         # pool2_flat = reshape(pool2, [-1, 7 * 7 * 64])
         pool2_flat, _ = flatten_layer(pool2)
-        dense = layers.dense(inputs=pool2_flat, units=1024, activation=nn.relu)
-        dropout = layers.dropout(
-            inputs=dense, rate=0.4, training=mode)
-
-        # Logits Layer
-        logits = layers.dense(inputs=dropout, units=10)
-        return True
+        #  Fully Connect Layer #1
+        fc1 = nn.relu(matmul(pool2_flat, theta_fc[0]) + theta_fc[1])
+        fc1_drop = nn.dropout(fc1, keep_prob)
+        # using softmax as an activate function
+        y = nn.softmax(matmul(fc1_drop, theta_fc[2]) + theta_fc[3])
+        #  Define cross entropy as a loss function
+        loss = objective.cross_entropy(y, y_)
+        return loss
 
     def get_genradvers_loss(self, batch_size, x, sample, theta_d):
         real_prob, real_log_prob = regression.log_linear(x, *theta_d)
@@ -220,9 +219,9 @@ class TrainModel(TrainVar):
         return y, y_
 
 
-class TrainOpt(TrainModel):
+class DeepOpt(DeepModel):
     def __init__(self, *args, **kwargs):
-        TrainModel.__init__(self, *args, **kwargs)
+        DeepModel.__init__(self, *args, **kwargs)
         self.solver = {
             "gd": stepper.gradient_decent,
             "sgd": stepper.adam_optimizer,
@@ -239,9 +238,9 @@ class TrainOpt(TrainModel):
         return self.solver[method](learning_rate, loss, var_list)
 
 
-class TrainIter(TrainOpt):
+class DeepIter(DeepOpt):
     def __init__(self, *args, **kwargs):
-        TrainOpt.__init__(self, *args, **kwargs)
+        DeepOpt.__init__(self, *args, **kwargs)
 
     def run_genradvers(self,
                        batch_size=100,
