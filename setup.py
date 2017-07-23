@@ -1,9 +1,10 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
 
 setup(
     name='solarimage',
-    version='0.0.1',
-    packages=[''],
+    version='0.0.2',
+    packages=find_packages(),
+    include_package_data=False,
     url='',
     license='',
     author='SolarFresh',
@@ -12,6 +13,7 @@ setup(
     install_requires=[
         "opencv-python==3.2.0.7",
         "pandas==0.20.3",
+        "plotly==2.0.12",
         "tensorflow==1.2.1",
     ]
 )
