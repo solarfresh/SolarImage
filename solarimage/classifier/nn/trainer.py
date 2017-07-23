@@ -8,11 +8,16 @@ from numpy import concatenate
 from numpy import float32
 from numpy import multiply
 from numpy import random
-from tensorflow import float32
-from tensorflow import global_variables_initializer
-from tensorflow import placeholder
 from tensorflow import Session
 from tensorflow import Variable
+from tensorflow import constant
+from tensorflow import float32
+from tensorflow import global_variables_initializer
+from tensorflow import layers
+from tensorflow import nn
+from tensorflow import placeholder
+from tensorflow import reshape
+from tensorflow import truncated_normal
 from tensorflow import zeros
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import random_seed
@@ -46,6 +51,7 @@ class DataSet(object):
             assert images.shape[3] == 1
             images = images.reshape(images.shape[0],
                                     images.shape[1] * images.shape[2])
+
         if dtype == dtypes.float32:
             # Convert from [0, 255] -> [0.0, 1.0].
             images = images.astype(float32)
@@ -107,10 +113,24 @@ class TrainVar(DataSet):
     """
     A class defining training variables
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, rank=1, *args, **kwargs):
         DataSet.__init__(self, *args, **kwargs)
-        self.images_size = self.images.shape[1]
+        self.rank = rank
         self.labels_size = self.labels.shape[1]
+        self.images_size = self.images.shape[1]
+        if rank > 1:
+            self.images_width = self.images.shape[0]
+            self.images_height = self.images.shape[1]
+        if rank > 2:
+            self.images_depth = self.images.shape[2]
+
+    def get_convolution_var(self):
+        # patch 5x5, in size 1, and filter size 32
+        conv_w1 = Variable(truncated_normal([5, 5, 1, 32], stddev=0.1), name='conv_weight_1')
+        conv_b1 = Variable(constant(0.1, shape=[32]), name='conv_bias_1')
+        # patch 5x5, in size 32, and filter size 64
+        conv_w2 = Variable(truncated_normal([5, 5, 32, 64], stddev=0.1), name='conv_weight_2')
+        conv_b2 = Variable(constant(0.1, shape=[64]), name='conv_bias_2')
 
     def get_genradvers_var(self, sample_size=100, hidden_size=128):
         # Generator Net
@@ -142,6 +162,49 @@ class TrainModel(TrainVar):
     """
     def __init__(self, *args, **kwargs):
         TrainVar.__init__(self, *args, **kwargs)
+
+    def convolutional_nets(self, batch_size, images, labels, mode):
+        def flatten_layer(layer):
+            layer_shape = layer.get_shape()
+            num_features = layer_shape[1:4].num_elements()
+
+            layer_flat = reshape(layer, [-1, num_features])
+            return layer_flat, num_features
+
+        if self.rank < 2:
+            raise ValueError("The shape of images must be 2-D")
+        # Convolutional Layer #1
+        #  strides:  [batch_stride x_stride y_stride depth_stride]
+        conv1 = layers.conv2d(
+            inputs=images,
+            filters=32,
+            kernel_size=[5, 5],
+            padding="same",
+            activation=nn.relu)
+
+        # Pooling Layer #1
+        #  If some cases, people slide the windows by more than 1 pixel. This number is called stride.
+        pool1 = layers.max_pooling2d(inputs=conv1, pool_size=[2, 2], strides=2)
+
+        # Convolutional Layer #2 and Pooling Layer #2
+        conv2 = layers.conv2d(
+            inputs=pool1,
+            filters=64,
+            kernel_size=[5, 5],
+            padding="same",
+            activation=nn.relu)
+        pool2 = layers.max_pooling2d(inputs=conv2, pool_size=[2, 2], strides=2)
+
+        # Dense Layer
+        # pool2_flat = reshape(pool2, [-1, 7 * 7 * 64])
+        pool2_flat, _ = flatten_layer(pool2)
+        dense = layers.dense(inputs=pool2_flat, units=1024, activation=nn.relu)
+        dropout = layers.dropout(
+            inputs=dense, rate=0.4, training=mode)
+
+        # Logits Layer
+        logits = layers.dense(inputs=dropout, units=10)
+        return True
 
     def get_genradvers_loss(self, batch_size, x, sample, theta_d):
         real_prob, real_log_prob = regression.log_linear(x, *theta_d)
